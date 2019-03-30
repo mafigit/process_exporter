@@ -56,7 +56,7 @@ func getResponse() string {
 
 	for _, processElement := range myProcessList {
 
-		prometheusExpose.WriteString("process_collector_process")
+		prometheusExpose.WriteString("process_exporter_process")
 		prometheusExpose.WriteString("{")
 
 		prometheusExpose.WriteString("name=\"")

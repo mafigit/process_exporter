@@ -1,6 +1,6 @@
 version: '3'
 services:
-  process_collector:
+  process_exporter:
     build:
       context: .
       dockerfile: Dockerfile
