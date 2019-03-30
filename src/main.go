@@ -1,66 +1,99 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
-	"github.com/mitchellh/go-ps"
-	"github.com/struCoder/pidusage"
+	"github.com/shirou/gopsutil/process"
 )
 
 type MyProcess struct {
 	name     string
 	cpuUsage float64
-	pid      int
+	pid      int32
 }
 
-func main() {
-	var processList []ps.Process
+func truncateString(str string, num int) string {
+	bnoden := str
+	if len(str) > num {
+		if num > 3 {
+			num -= 3
+		}
+		bnoden = str[0:num] + "..."
+	}
+	return bnoden
+}
+
+func getResponse() string {
+	var processList []*process.Process
+
 	var processListError error
-
-	processList, processListError = ps.Processes()
+	processList, processListError = process.Processes()
 	myProcessList := make([]MyProcess, len(processList))
-
 	if processListError != nil {
 		fmt.Println(processListError)
 		os.Exit(1)
 	}
-
 	for index, processElement := range processList {
-		myPid := processElement.Pid()
-		processName := processElement.Executable()
-		sysInfo, err := pidusage.GetStat(myPid)
+
+		processName, error := processElement.Name()
+		if error != nil {
+			continue
+		}
+
+		cpuUsage, err := processElement.CPUPercent()
+
 		if err == nil {
-			myProcessList[index] = MyProcess{name: processName, cpuUsage: sysInfo.CPU, pid: myPid}
+			myProcessList[index] = MyProcess{name: processName, cpuUsage: cpuUsage, pid: processElement.Pid}
 		}
 	}
-	fmt.Println(myProcessList[0])
 
-	//	var processList []*process.Process
-	//	var processListError error
-	//
-	//	processList, processListError = process.Processes()
-	//
-	//	if processListError != nil {
-	//		fmt.Println(processListError)
-	//		os.Exit(1)
-	//	}
-	//
-	//	myProcessList := make([]MyProcess, len(processList))
-	//
-	//	for _, processElement := range processList {
-	//		cpuPercent, error := processElement.CPUPercent()
-	//		processName, error := processElement.Name()
-	//		if error == nil {
-	//			myProcessList = append(myProcessList,
-	//				MyProcess{name: processName, cpuUsage: cpuPercent})
-	//		}
-	//	}
-	//
-	//	sort.Slice(myProcessList, func(i, j int) bool {
-	//		return myProcessList[i].cpuUsage > myProcessList[j].cpuUsage
-	//	})
-	//
-	//	fmt.Println(myProcessList)
+	var prometheusExpose strings.Builder
 
+	for _, processElement := range myProcessList {
+
+		prometheusExpose.WriteString("process_collector_process")
+		prometheusExpose.WriteString("{")
+
+		prometheusExpose.WriteString("name=\"")
+		prometheusExpose.WriteString(processElement.name)
+		prometheusExpose.WriteString("\"")
+
+		prometheusExpose.WriteString(",")
+		prometheusExpose.WriteString("pid=\"")
+		prometheusExpose.WriteString(strconv.FormatInt(int64(processElement.pid), 10))
+		prometheusExpose.WriteString("\"")
+
+		prometheusExpose.WriteString("}")
+		prometheusExpose.WriteString(" ")
+
+		convertedCPUUsage := fmt.Sprintf("%.2f", processElement.cpuUsage)
+		prometheusExpose.WriteString(convertedCPUUsage)
+		prometheusExpose.WriteString("\n")
+	}
+
+	return prometheusExpose.String()
+}
+
+func main() {
+	portArgumentPtr := flag.String("port", "9020", "Port number")
+	flag.Parse()
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		response := getResponse()
+		fmt.Fprintf(w, response)
+	})
+
+	var listentingPort strings.Builder
+
+	listentingPort.WriteString(":")
+	listentingPort.WriteString(*portArgumentPtr)
+
+	fmt.Println(listentingPort.String())
+
+	http.ListenAndServe(listentingPort.String(), nil)
 }

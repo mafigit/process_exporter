@@ -1,0 +1,9 @@
+version: '3'
+services:
+  process_collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${PROCESS_EXPORTER_DOCKER_IMAGE}:${PROCESS_EXPORTER_DOCKER_TAG}
+    ports:
+      - "9020:9020"
