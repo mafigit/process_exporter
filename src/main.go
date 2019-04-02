@@ -11,34 +11,19 @@ import (
 	"github.com/shirou/gopsutil/process"
 )
 
-type MyProcess struct {
-	name     string
-	cpuUsage float64
-	pid      int32
-}
-
-func truncateString(str string, num int) string {
-	bnoden := str
-	if len(str) > num {
-		if num > 3 {
-			num -= 3
-		}
-		bnoden = str[0:num] + "..."
-	}
-	return bnoden
-}
-
 func getResponse() string {
 	var processList []*process.Process
 
 	var processListError error
 	processList, processListError = process.Processes()
-	myProcessList := make([]MyProcess, len(processList))
+
 	if processListError != nil {
 		fmt.Println(processListError)
 		os.Exit(1)
 	}
-	for index, processElement := range processList {
+
+	var prometheusExpose strings.Builder
+	for _, processElement := range processList {
 
 		processName, error := processElement.Name()
 		if error != nil {
@@ -47,35 +32,30 @@ func getResponse() string {
 
 		cpuUsage, err := processElement.CPUPercent()
 
-		if err == nil {
-			myProcessList[index] = MyProcess{name: processName, cpuUsage: cpuUsage, pid: processElement.Pid}
+		if err != nil {
+			continue
 		}
-	}
-
-	var prometheusExpose strings.Builder
-
-	for _, processElement := range myProcessList {
 
 		prometheusExpose.WriteString("process_exporter_process")
 		prometheusExpose.WriteString("{")
 
 		prometheusExpose.WriteString("name=\"")
-		prometheusExpose.WriteString(processElement.name)
+		prometheusExpose.WriteString(processName)
 		prometheusExpose.WriteString("\"")
 
 		prometheusExpose.WriteString(",")
 		prometheusExpose.WriteString("pid=\"")
-		prometheusExpose.WriteString(strconv.FormatInt(int64(processElement.pid), 10))
+		prometheusExpose.WriteString(strconv.FormatInt(int64(processElement.Pid), 10))
 		prometheusExpose.WriteString("\"")
 
 		prometheusExpose.WriteString("}")
 		prometheusExpose.WriteString(" ")
 
-		convertedCPUUsage := fmt.Sprintf("%.2f", processElement.cpuUsage)
+		convertedCPUUsage := fmt.Sprintf("%.2f", cpuUsage)
 		prometheusExpose.WriteString(convertedCPUUsage)
 		prometheusExpose.WriteString("\n")
-	}
 
+	}
 	return prometheusExpose.String()
 }
 
